@@ -10,6 +10,8 @@ configs:
   data_files: data/files-*.parquet
 - config_name: listing
   data_files: listing.parquet
+- config_name: decisions_2025_2026
+  data_files: extracted/decisions_2025_2026.parquet
 ---
 
 # EEOC federal-sector appellate decisions
@@ -47,6 +49,24 @@ with `http_status` 200.
 a quick way to find a file without opening the shards. `state/runs.jsonl` has one line
 per daily run: window, new rows, and whether the index matched the site's total.
 
+`extracted/decisions_2025_2026.parquet` has fields read from each file posted in 2025-26 by
+`claude-haiku-5-5`: one row per unique file (5,744 from a 2026-11-05 run, not updated daily), with `url`,
+`sha256`, `numbers`, `posted_month`, and these columns:
+
+- Case: `decision_date`, `agency`, `appealing_party`, `date_formal_complaint`
+- Complainant, as stated in the decision: `job_title`, `complainant_race_stated`, `complainant_sex_stated`,
+  `disability_condition`, `representation`
+- Bases: `basis_race`, `basis_sex`, `basis_disability`, `basis_age`, `basis_reprisal`
+- Result: `discrimination_found`, `complainant_got_relief`, `commission_changed_result`,
+  `aj_found_discrimination`, `agency_action_on_aj`
+- Issues: `issue_performance_appraisal`, `issue_non_selection_or_promotion`, `theme_telework`
+
+Only columns that matched an answer key at least 97% of the time on 183 test decisions are included. These
+are model outputs, so check anything you rely on against the decision. The answer key was made by Claude
+agents, not lawyers. `discrimination_found` means a finding exists in the case; it may predate this
+decision, and false includes "not reached". Accuracy by column, definitions and checks are in
+[extraction/README.md](https://github.com/abigailhaddad/eeoc-appellate-decisions/blob/main/extraction/README.md).
+
 ## Things to know before you use it
 
 The number in a file name doesn't reliably identify the decision. 6,175 numbers appear in
@@ -57,6 +77,9 @@ as an original decision and its later reconsideration, often under the identical
 name. Two had a file name pointing to the wrong case entirely (`05a40059.txt` is really
 Request No. 05A50059). Use the case number printed in the document, and `sha256` to find
 exact copies.
+
+EEOC's posting dates aren't decision dates. It posted almost nothing between December 2024 and January 2026
+(7 files in folders dated 2025), then posted decisions issued during that gap.
 
 Other quirks of the source, kept as-is:
 
@@ -71,5 +94,7 @@ Other quirks of the source, kept as-is:
 - Two listing rows link to the bare site root, `https://www.eeoc.gov`. They're in
   `listing.csv` but weren't downloaded.
 - Older decisions name complainants in full, as they do on EEOC's site.
+- About 10% of the 2025-26 PDFs have an image for page 1, apparently because the real name was redacted
+  there, so plain text extraction misses the caption. `ocr_used` marks them in the extracted table.
 
 Code: https://github.com/abigailhaddad/eeoc-appellate-decisions

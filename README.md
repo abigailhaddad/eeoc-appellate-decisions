@@ -20,6 +20,9 @@ defaults.
 - `reconcile_hf.py`: checks the Hub against the state file.
 - `fetch_files.py`: older downloader to local disk.
 
+`extraction/` reads fields out of the 2025-26 decisions with Claude; its README says which fields and how
+they were tested.
+
 ## Running
 
 ```sh
