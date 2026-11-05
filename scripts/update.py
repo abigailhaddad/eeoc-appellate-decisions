@@ -173,7 +173,7 @@ def main():
         return 2
     if not report["total_matches"]:
         print(f"TOTAL MISMATCH: index has {report['index_rows_after']:,} rows, site says {report['site_total']:,}. "
-              "Something was inserted before the window or removed; run a full recrawl.")
+              "Something was inserted before the window or removed; start the monthly-recrawl workflow with force.")
         return 3
     print("OK")
     return 0

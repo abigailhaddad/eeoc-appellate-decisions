@@ -7,7 +7,7 @@ import json, re, sys
 import pandas as pd
 
 work, *paths = sys.argv[1:]
-d = pd.read_parquet(f"{work}/decisions_2025_2026.parquet")
+d = pd.read_parquet(f"{work}/decisions.parquet")
 R = {}
 for p in paths:
     for l in open(p):

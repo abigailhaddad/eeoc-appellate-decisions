@@ -1,0 +1,60 @@
+# Monthly full recrawl of the listing (scripts/recrawl.py). A crawl takes longer than one job may run, so each
+# run does a chunk, saves its place on the Hub, and starts the next. The later dates in the schedule pick up
+# a crawl if that hand-off failed; if nothing is under way they do nothing.
+name: monthly-recrawl
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Start a new crawl even if one ran recently
+        type: boolean
+        default: false
+  schedule:
+    - cron: "17 3 1-4 * *"
+permissions:
+  contents: read
+  issues: write
+  actions: write
+concurrency:
+  group: monthly-recrawl
+  cancel-in-progress: false
+jobs:
+  recrawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Crawl
+        id: crawl
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          FORCE: ${{ inputs.force && '--force' || '' }}
+        run: |
+          uv run --no-project --with lxml --with pandas --with pyarrow --with huggingface_hub \
+            python -I scripts/recrawl.py work abigailhaddad/eeoc-appellate-decisions $FORCE 2>&1 | tee recrawl.log
+          exit ${PIPESTATUS[0]}
+      - name: Start the next chunk
+        if: steps.crawl.outputs.more == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for i in 1 2 3 4 5; do
+            gh workflow run recrawl.yml --repo ${{ github.repository }} && exit 0
+            sleep 60
+          done
+          exit 1
+      - name: Open issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tail -30 recrawl.log > tail.txt || echo "no log" > tail.txt
+          gh issue create --repo ${{ github.repository }} --title "Monthly recrawl needs a look ($(date -u +%F))" \
+            --body "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          Exit code 2: stopped on an error, progress kept, rerun to continue. Exit code 3: finished, with URLs in the index that aren't in the listing; see state/recrawl_report.json on the Hub.
+
+          \`\`\`
+          $(cat tail.txt)
+          \`\`\`"

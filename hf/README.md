@@ -10,8 +10,8 @@ configs:
   data_files: data/files-*.parquet
 - config_name: listing
   data_files: listing.parquet
-- config_name: decisions_2025_2026
-  data_files: extracted/decisions_2025_2026.parquet
+- config_name: decisions
+  data_files: extracted/decisions.parquet
 ---
 
 # EEOC federal-sector appellate decisions
@@ -48,7 +48,7 @@ with `http_status` 200.
 a quick way to find a file without opening the shards. `state/runs.jsonl` has one line
 per daily run: window, new rows, and whether the index matched the site's total.
 
-`extracted/decisions_2025_2026.parquet` has fields read from each file posted since 2025 by
+`extracted/decisions.parquet` has fields read from each file posted since 2025 by
 `claude-haiku-5-5`: one row per unique file, updated daily, with `url`,
 `sha256`, `numbers`, `posted_month`, and these columns:
 

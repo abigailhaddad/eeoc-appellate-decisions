@@ -53,9 +53,17 @@
    2026-11-05 for all 117 shards, 115,798 rows; a deleted line and a changed hash were
    both caught in a test).
 
-Not built yet: the full recrawl. At 3 s a page it takes about 10 hours, longer than a
-GitHub Actions job may run, and the total-changed guard in `fetch_pages.py` would stop
-it whenever EEOC posts mid-crawl. It needs to run in chunks and diff by URL set.
+## Monthly full recrawl (`scripts/recrawl.py`)
+
+The daily job can't see a file listed early in the listing, or a removal and an insertion that cancel out. A
+full crawl can, but it takes longer than a GitHub Actions job may run and EEOC posts during it. So it runs in
+chunks: `.github/workflows/recrawl.yml` reads pages, saves its place to `state/recrawl.json` on the Hub, and
+starts the next chunk. Unlike a window fetch, a total that changes mid-crawl is expected. Rows shift while it
+runs, so it compares URL sets, rereads the tail at the end, and checks anything still missing directly on
+eeoc.gov. New URLs go into the listing for the daily job to download. Nothing is removed from the index or the
+dataset: missing URLs are reported in `state/recrawl_report.json`, and the run opens an issue.
+
+If the daily job exits 3, start this by hand with the `force` input.
 
 ## What to alert on (open an issue)
 
@@ -147,7 +155,6 @@ about 7 GB (txt ~14 KB, PDF ~180 KB on average), a rough estimate.
 
 ## TODO
 
-- Full recrawl in chunks (see "Not built yet" above).
 - Hard-fail or separately flag rows whose URL is not under `/sites/default/files/`.
 - After the full download: parse each document's header (case numbers, decision type,
   date), group by SHA-256, and classify every shared-number group. Spot-check each class

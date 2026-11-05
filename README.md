@@ -3,7 +3,8 @@
 Downloads every file on EEOC's [federal-sector appellate decisions](https://www.eeoc.gov/federal-sector/appellate-decisions)
 listing into the Hugging Face dataset
 [`abigailhaddad/eeoc-appellate-decisions`](https://huggingface.co/datasets/abigailhaddad/eeoc-appellate-decisions),
-and checks daily for new ones (`.github/workflows/update.yml`).
+and checks daily for new ones (`.github/workflows/update.yml`), with a full recrawl monthly
+(`.github/workflows/recrawl.yml`).
 
 What's in the data: `hf/README.md` (the dataset card). How the listing behaves and how
 updates work: `PIPELINE.md`. Each script's docstring and `--help` give its options and
@@ -13,6 +14,7 @@ defaults.
 
 - `update.py`: the daily job. Fetches the end of the listing, finds new URLs, downloads
   them to the Hub, and reconciles.
+- `recrawl.py`: the monthly job. Reads the whole listing in chunks and reports new and missing files.
 - `fetch_pages.py`: fetches listing pages.
 - `parse_listing.py`: turns saved listing pages into one row per listed file.
 - `validate_index.py`: checks a full crawl.

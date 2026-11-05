@@ -5,7 +5,7 @@ usage: build_table.py <work_dir> <listing.parquet> <results.jsonl> [more results
 For each unique file: keep the last successful result, check it against the schema, check quotes
 against the text, and compare decision_date with the date printed after FOR THE COMMISSION.
 A value whose quote isn't in the text is blanked and named in values_dropped. Writes
-<work_dir>/decisions_2025_2026.parquet and prints a report; nothing is uploaded.
+<work_dir>/decisions.parquet and prints a report; nothing is uploaded.
 """
 import json, os, re, sys, unicodedata
 from collections import Counter
@@ -130,7 +130,7 @@ def main():
             continue
         rows.append(build_row(sha, fs, r["fields"], open(f"{work}/text/{sha}.txt").read(), nums, sha in ocr))
     df = pd.DataFrame(rows)
-    df.to_parquet(f"{work}/decisions_2025_2026.parquet", index=False)
+    df.to_parquet(f"{work}/decisions.parquet", index=False)
     print("unique files", len(by_sha), "| rows", len(df), "|", dict(rep))
     print("rows with a value changed or blanked:", int((df.values_dropped != "").sum()))
     print("schema problems:", bad_schema[:8])

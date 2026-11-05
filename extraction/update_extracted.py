@@ -24,7 +24,7 @@ from batch import params  # noqa: E402
 from build_table import POSTED_RE, build_row, schema_errors  # noqa: E402
 from text import download, to_text  # noqa: E402
 
-TABLE = "extracted/decisions_2025_2026.parquet"
+TABLE = "extracted/decisions.parquet"
 FIRST_YEAR = 2025
 IN_USD, OUT_USD = 0.10 / 1e6, 0.50 / 1e6
 LONG_IN_USD, LONG_OUT_USD = 0.50 / 1e6, 2.50 / 1e6
