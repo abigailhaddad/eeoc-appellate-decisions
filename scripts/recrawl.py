@@ -1,6 +1,6 @@
 """Full recrawl of the listing, in chunks that fit a GitHub Actions job.
 
-usage: recrawl.py <work_dir> <hf_repo_id> [--max-pages N] [--delay S] [--force] [--no-upload]
+usage: recrawl.py <work_dir> <hf_repo_id> [--max-minutes M] [--max-pages N] [--delay S] [--force] [--no-upload]
 
 The daily job only reads the end of the listing. This reads every page, which catches what that can't: new
 files listed earlier in the listing, and listed files that disappeared.
@@ -94,11 +94,11 @@ def read_page(page, known, seen, state, get=fetch_pages._get, sleep=time.sleep):
     return total
 
 
-def crawl(state, known, seen, max_pages, delay, save, get=fetch_pages._get, sleep=time.sleep):
-    """Read pages from next_page. Returns True once past the last page."""
+def crawl(state, known, seen, max_pages, delay, save, get=fetch_pages._get, sleep=time.sleep, deadline=None, clock=time.monotonic):
+    """Read pages from next_page until max_pages or the deadline. Returns True once past the last page."""
     done = 0
     while True:
-        if done >= max_pages:
+        if done >= max_pages or (deadline is not None and clock() >= deadline):
             return False
         total = read_page(state["next_page"], known, seen, state, get, sleep)
         last = (total - 1) // 10
@@ -236,7 +236,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("work_dir")
     ap.add_argument("repo_id")
-    ap.add_argument("--max-pages", type=int, default=4000)
+    ap.add_argument("--max-minutes", type=float, default=240, help="stop the chunk then; leaves time to finish inside a job")
+    ap.add_argument("--max-pages", type=int, default=10 ** 6)
     ap.add_argument("--delay", type=float, default=3.0)
     ap.add_argument("--force", action="store_true", help="start a new crawl whatever the state says")
     ap.add_argument("--no-upload", action="store_true", help="keep state in work_dir; write nothing to the Hub")
@@ -263,7 +264,7 @@ def main():
         print(f"saved at page {state['next_page']}, {len(seen):,} URLs, {len(state['new_rows'])} new", flush=True)
 
     try:
-        past_end = crawl(state, known, seen, a.max_pages, a.delay, save)
+        past_end = crawl(state, known, seen, a.max_pages, a.delay, save, deadline=time.monotonic() + a.max_minutes * 60)
     except fetch_pages.FetchError as e:
         save()
         print(f"STOPPING: {e}", flush=True)

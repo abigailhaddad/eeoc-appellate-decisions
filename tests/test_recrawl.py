@@ -141,3 +141,11 @@ def test_finish_clean_exit_and_late_growth(tmp_path):
     late = urls + [U.format(i) for i in range(30, 33)]  # posted after the crawl read the last page
     code = recrawl.finish(hub, state, set(urls), seen, 0, get=site(late), sleep=noop, check=lambda u: 200)
     assert code == 0 and len(pd.read_parquet(f"{tmp_path}/listing.parquet")) == 33
+
+
+def test_chunk_stops_at_deadline_and_keeps_place():
+    urls = [U.format(i) for i in range(50)]
+    ticks = iter(range(100))
+    state, seen = recrawl.new_state(), set()
+    done = recrawl.crawl(state, set(), seen, 10 ** 6, 0, noop, get=site(urls), sleep=noop, deadline=2, clock=lambda: next(ticks))
+    assert not done and state["next_page"] == 2 and len(seen) == 20
