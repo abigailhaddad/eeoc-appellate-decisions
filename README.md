@@ -7,7 +7,7 @@ and checks daily for new ones (`.github/workflows/update.yml`), with a full recr
 (`.github/workflows/recrawl.yml`).
 
 What's in the data: `hf/README.md` (the dataset card). How the listing behaves and how
-updates work: `PIPELINE.md`. Each script's docstring and `--help` give its options and
+updates work: `PIPELINE.md`. Taking over the repo: `HANDOFF.md`. Each script's docstring and `--help` give its options and
 defaults.
 
 ## Scripts

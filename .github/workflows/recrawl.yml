@@ -11,6 +11,9 @@ on:
         default: false
   schedule:
     - cron: "17 3 1-4 * *"
+# The Hugging Face dataset this workflow updates. Change it here when the dataset moves to a new owner.
+env:
+  HF_DATASET: abigailhaddad/eeoc-appellate-decisions
 permissions:
   contents: read
   issues: write
@@ -32,7 +35,7 @@ jobs:
           FORCE: ${{ inputs.force && '--force' || '' }}
         run: |
           uv run --no-project --with lxml --with pandas --with pyarrow --with huggingface_hub \
-            python -I scripts/recrawl.py work abigailhaddad/eeoc-appellate-decisions $FORCE 2>&1 | tee recrawl.log
+            python -I scripts/recrawl.py work "$HF_DATASET" $FORCE 2>&1 | tee recrawl.log
           exit ${PIPESTATUS[0]}
       - name: Start the next chunk
         if: steps.crawl.outputs.more == 'true'
