@@ -6,6 +6,9 @@ on:
   workflow_dispatch: {}
   schedule:
     - cron: "17 11 * * *"   # 11:17 UTC daily
+# The Hugging Face dataset this workflow updates. Change it here when the dataset moves to a new owner.
+env:
+  HF_DATASET: abigailhaddad/eeoc-appellate-decisions
 permissions:
   contents: read
   issues: write
@@ -26,7 +29,7 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           uv run --no-project --with lxml --with pandas --with pyarrow --with huggingface_hub \
-            python -I scripts/update.py work abigailhaddad/eeoc-appellate-decisions 2>&1 | tee update.log
+            python -I scripts/update.py work "$HF_DATASET" 2>&1 | tee update.log
           exit ${PIPESTATUS[0]}
       - name: Install PDF and OCR tools
         run: sudo apt-get update && sudo apt-get install -y poppler-utils tesseract-ocr
@@ -37,7 +40,7 @@ jobs:
           ANTHROPIC_WORKSPACE_ID: ${{ secrets.ANTHROPIC_WORKSPACE_ID }}
         run: |
           uv run --no-project --with anthropic --with pandas --with pyarrow --with huggingface_hub \
-            python -I extraction/update_extracted.py work_extract abigailhaddad/eeoc-appellate-decisions 2>&1 | tee -a update.log
+            python -I extraction/update_extracted.py work_extract "$HF_DATASET" 2>&1 | tee -a update.log
           exit ${PIPESTATUS[0]}
       - name: Open issue on failure
         if: failure()
