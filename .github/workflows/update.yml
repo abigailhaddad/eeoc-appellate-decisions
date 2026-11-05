@@ -1,6 +1,6 @@
 # Daily incremental update of the Hugging Face dataset (scripts/update.py).
-# Needs the repo secret HF_TOKEN (write access to the dataset).
-# Not active until this repo is pushed to GitHub and the secret is set.
+# Then extracts fields from any new decisions (extraction/update_extracted.py).
+# Needs repo secrets HF_TOKEN (write access to the dataset), ANTHROPIC_API_KEY and ANTHROPIC_WORKSPACE_ID.
 name: daily-update
 on:
   workflow_dispatch: {}
@@ -20,13 +20,24 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
       - name: Tests
-        run: uv run --no-project --with pytest --with lxml --with pandas --with pyarrow --with huggingface_hub python -I -m pytest -q tests
+        run: uv run --no-project --with pytest --with lxml --with pandas --with pyarrow --with huggingface_hub --with anthropic python -I -m pytest -q tests
       - name: Update
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           uv run --no-project --with lxml --with pandas --with pyarrow --with huggingface_hub \
             python -I scripts/update.py work abigailhaddad/eeoc-appellate-decisions 2>&1 | tee update.log
+          exit ${PIPESTATUS[0]}
+      - name: Install PDF and OCR tools
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils tesseract-ocr
+      - name: Extract fields from new decisions
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_WORKSPACE_ID: ${{ secrets.ANTHROPIC_WORKSPACE_ID }}
+        run: |
+          uv run --no-project --with anthropic --with pandas --with pyarrow --with huggingface_hub \
+            python -I extraction/update_extracted.py work_extract abigailhaddad/eeoc-appellate-decisions 2>&1 | tee -a update.log
           exit ${PIPESTATUS[0]}
       - name: Open issue on failure
         if: failure()
@@ -37,7 +48,7 @@ jobs:
           gh issue create --title "Daily EEOC update failed ($(date -u +%F))" \
             --body "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
-          Exit codes: 2 stopped before finishing (fetch error, challenge page, too many new rows, window could not reach the frontier); 3 finished but the index and the site's total disagree (run a full recrawl); 1 reconcile failed.
+          Exit codes: 2 stopped before finishing (fetch error, challenge page, too many new rows, window could not reach the frontier); 3 finished but the index and the site's total disagree (run a full recrawl); 1 reconcile failed. From the extract step: 2 stopped by a limit; 1 some files got no result and will be retried tomorrow.
 
           \`\`\`
           $(cat tail.txt)

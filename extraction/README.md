@@ -1,11 +1,11 @@
 # Extracted fields
 
-`claude-haiku-5-5` reads each decision posted in 2025-26 and fills in `prompt.py`. Only the columns in
+`claude-haiku-5-5` reads each decision posted since 2025 and fills in `prompt.py`. Only the columns in
 `columns.py` are published: the ones that passed testing. The model extracts more than that (outcome, path to
 decision, reasons, remedies, sanctions); those didn't pass and aren't published.
 
 The numbers are in data files, not here: `accuracy.csv` has the test results for each column and
-`run_summary.json` has the counts from the full run.
+`run_summary.json` has the counts from the first full run.
 
 ## Running it
 
@@ -16,7 +16,9 @@ python3 -I extraction/build_table.py WORK LISTING.parquet WORK/results_full.json
 python3 -I extraction/crosscheck.py WORK WORK/results_full.jsonl
 ```
 
-This is a one-time run, not part of the daily update, so newly posted decisions aren't in the table.
+That's the first full run. After it, the daily job runs `update_extracted.py`, which finds files with no row
+and does the same steps with the same prompt and checks, using normal calls instead of a batch. It stops at
+the limits in its `--help`. Rerunning is safe: files with a row are skipped.
 
 ## How it was tested
 

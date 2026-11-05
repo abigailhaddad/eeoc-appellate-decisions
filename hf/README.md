@@ -48,8 +48,8 @@ with `http_status` 200.
 a quick way to find a file without opening the shards. `state/runs.jsonl` has one line
 per daily run: window, new rows, and whether the index matched the site's total.
 
-`extracted/decisions_2025_2026.parquet` has fields read from each file posted in 2025-26 by
-`claude-haiku-5-5`: one row per unique file (a 2026-11-05 run, not updated daily), with `url`,
+`extracted/decisions_2025_2026.parquet` has fields read from each file posted since 2025 by
+`claude-haiku-5-5`: one row per unique file, updated daily, with `url`,
 `sha256`, `numbers`, `posted_month`, and these columns:
 
 - Case: `decision_date`, `agency`, `appealing_party`, `date_formal_complaint`

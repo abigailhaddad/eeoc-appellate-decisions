@@ -20,13 +20,13 @@ defaults.
 - `reconcile_hf.py`: checks the Hub against the state file.
 - `fetch_files.py`: older downloader to local disk.
 
-`extraction/` reads fields out of the 2025-26 decisions with Claude; its README says which fields and how
+`extraction/` reads fields out of decisions posted since 2025 with Claude; its README says which fields and how
 they were tested.
 
 ## Running
 
 ```sh
-uv run --no-project --with pytest --with lxml --with pandas --with pyarrow --with huggingface_hub \
+uv run --no-project --with pytest --with lxml --with pandas --with pyarrow --with huggingface_hub --with anthropic \
   python -I -m pytest -q tests
 
 # reads the Hub and the live site, uploads nothing
@@ -34,7 +34,8 @@ uv run --no-project --with lxml --with pandas --with pyarrow --with huggingface_
   python -I scripts/update.py work abigailhaddad/eeoc-appellate-decisions --dry-run
 ```
 
-A real run needs `HF_TOKEN` with write access to the dataset (a repo secret in Actions).
+A real run needs `HF_TOKEN` with write access to the dataset, and extraction needs `ANTHROPIC_API_KEY` (repo
+secrets in Actions).
 The exit codes are in `update.py`'s docstring.
 
 Code: MIT. The decisions are U.S. government records.

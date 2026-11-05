@@ -18,6 +18,7 @@ from prompt import PROMPT_VERSION, MODEL, SCHEMA  # noqa: E402
 
 MONTHS = "January|February|March|April|May|June|July|August|September|October|November|December"
 DATE_RE = re.compile(rf"({MONTHS})\s+(\d{{1,2}}),\s+(\d{{4}})")
+POSTED_RE = re.compile(r"/(20[2-9]\d)[-_](\d\d)[-_/]")  # year and month in the file's folder
 MN = {m: i + 1 for i, m in enumerate(MONTHS.split("|"))}
 QUOTED = {"decision_date": "decision_date_quote", "representation": "representation_quote",
           "theme_telework": "theme_telework_quote"}
@@ -63,6 +64,45 @@ def schema_errors(f):
     return e
 
 
+def build_row(sha, fs, f, t, nums, ocr_used):
+    """One published row. fs: the file records with this hash. f: model fields. t: the text."""
+    doc = norm(t)
+    out = columns(f)
+    drops = []
+    for col, q in QUOTED.items():
+        v, quote = out[col], clean(f.get(q) or "")
+        if v in ("", None, False, "not_stated"):
+            continue
+        if not quote or norm(quote) not in doc:
+            drops.append(col)
+            out[col] = None
+    pd_ = printed_date(t)
+    if pd_ and out["decision_date"] and pd_ != out["decision_date"]:
+        out["decision_date"] = pd_  # the printed date wins
+        drops.append("decision_date(replaced by printed date)")
+    elif pd_ and not out["decision_date"]:
+        out["decision_date"] = pd_
+    out["agency"] = parent_agency(out["agency"])
+    if clean(f.get("outcome")) == "reversed" and not out["commission_changed_result"]:
+        out["commission_changed_result"] = True  # the model's own outcome says it reversed
+        drops.append("commission_changed_result(set from outcome)")
+    warn = []
+    if out["aj_found_discrimination"] == "no_aj" and out["agency_action_on_aj"] != "no_aj_decision":
+        out["aj_found_discrimination"] = None  # says no judge, but records what the agency did with a judge's decision
+        drops.append("aj_found_discrimination(contradiction)")
+    if out["date_formal_complaint"] and out["decision_date"] and out["date_formal_complaint"] > out["decision_date"]:
+        warn.append("formal_complaint_dated_after_decision")
+    first = fs[0]
+    m0 = re.search(r"\b(20\d\d)\d{6}\b", first["file_name"])
+    if m0 and out["decision_date"] and int(out["decision_date"][:4]) < int(m0.group(1)) - 1:  # numbers use the fiscal year
+        warn.append("decision_date_before_appeal_year")
+    m = POSTED_RE.search(first["url"])
+    return {"sha256": sha, "url": first["url"], "file_name": first["file_name"], "n_urls": len(fs),
+            "numbers": nums.get(first["url"], ""), "posted_month": f"{m.group(1)}-{m.group(2)}", **out,
+            "values_dropped": ";".join(drops), "source_warnings": ";".join(warn), "ocr_used": ocr_used,
+            "model": MODEL, "prompt_version": PROMPT_VERSION}
+
+
 def main():
     work, listing, *paths = sys.argv[1:]
     res = {}
@@ -76,66 +116,23 @@ def main():
     for f in files:
         by_sha.setdefault(f["sha256"], []).append(f)
     nums = pd.read_parquet(listing).drop_duplicates("url").set_index("url")["numbers"].to_dict()
-    rows, rep = [], Counter()
-    bad_schema, date_diff, dropped = [], [], Counter()
+    ocr = {json.loads(l)["sha256"] for l in open(f"{work}/text_log.jsonl") if json.loads(l).get("ocr_pages")}
+    rows, rep, bad_schema = [], Counter(), []
     for sha, fs in by_sha.items():
         r = res.get(sha)
         if r is None:
             rep["no result"] += 1
             continue
-        f = r["fields"]
-        e = schema_errors(f)
+        e = schema_errors(r["fields"])
         if e:
             bad_schema.append((sha[:10], e[:4]))
             rep["schema problem, row left out"] += 1
             continue
-        t = open(f"{work}/text/{sha}.txt").read()
-        doc = norm(t)
-        out = columns(f)
-        drops = []
-        for col, q in QUOTED.items():
-            v, quote = out[col], clean(f.get(q) or "")
-            if v in ("", None, False, "not_stated"):
-                continue
-            if not quote or norm(quote) not in doc:
-                drops.append(col)
-                dropped[col] += 1
-                out[col] = None
-        pd_ = printed_date(t)
-        rep["printed date found"] += bool(pd_)
-        if pd_ and out["decision_date"] and pd_ != out["decision_date"]:
-            date_diff.append((sha[:10], out["decision_date"], pd_))
-            out["decision_date"] = pd_  # the printed date wins
-            drops.append("decision_date(replaced by printed date)")
-        elif pd_ and not out["decision_date"]:
-            out["decision_date"] = pd_
-        out["agency"] = parent_agency(out["agency"])
-        if clean(f.get("outcome")) == "reversed" and not out["commission_changed_result"]:
-            out["commission_changed_result"] = True  # the model's own outcome says it reversed
-            drops.append("commission_changed_result(set from outcome)")
-        warn = []
-        if out["aj_found_discrimination"] == "no_aj" and out["agency_action_on_aj"] != "no_aj_decision":
-            out["aj_found_discrimination"] = None  # says no judge, but records what the agency did with a judge's decision
-            drops.append("aj_found_discrimination(contradiction)")
-        if out["date_formal_complaint"] and out["decision_date"] and out["date_formal_complaint"] > out["decision_date"]:
-            warn.append("formal_complaint_dated_after_decision")
-        first = fs[0]
-        m0 = re.search(r"\b(20\d\d)\d{6}\b", first["file_name"])
-        if m0 and out["decision_date"] and int(out["decision_date"][:4]) < int(m0.group(1)) - 1:  # numbers use the fiscal year
-            warn.append("decision_date_before_appeal_year")
-        m = re.search(r"/(202[56])[-_](\d\d)[-_/]", first["url"])
-        rows.append({"sha256": sha, "url": first["url"], "file_name": first["file_name"], "n_urls": len(fs),
-                     "numbers": nums.get(first["url"], ""), "posted_month": f"{m.group(1)}-{m.group(2)}", **out,
-                     "values_dropped": ";".join(drops), "source_warnings": ";".join(warn), "ocr_used": False,
-                     "model": MODEL, "prompt_version": PROMPT_VERSION})
-    ocr = {json.loads(l)["sha256"] for l in open(f"{work}/text_log.jsonl") if json.loads(l).get("ocr_pages")}
-    for r in rows:
-        r["ocr_used"] = r["sha256"] in ocr
+        rows.append(build_row(sha, fs, r["fields"], open(f"{work}/text/{sha}.txt").read(), nums, sha in ocr))
     df = pd.DataFrame(rows)
     df.to_parquet(f"{work}/decisions_2025_2026.parquet", index=False)
     print("unique files", len(by_sha), "| rows", len(df), "|", dict(rep))
-    print("values blanked (quote not in text):", dict(dropped), "| rows with any:", int((df.values_dropped != "").sum()))
-    print("dates differing from printed date:", len(date_diff), date_diff[:8])
+    print("rows with a value changed or blanked:", int((df.values_dropped != "").sum()))
     print("schema problems:", bad_schema[:8])
     print("source warnings:", df.source_warnings[df.source_warnings != ""].value_counts().to_dict())
     print("--- contradictions to look at")
