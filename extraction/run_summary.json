@@ -1,0 +1,22 @@
+{
+ "run_date": "2026-11-05",
+ "model": "claude-haiku-5-5",
+ "prompt_version": "v4",
+ "unique_files": 5744,
+ "files_with_ocr": 584,
+ "no_printed_date": 2,
+ "aj_found_blanked": 116,
+ "changed_set_from_outcome": 1,
+ "telework_blanked": 7,
+ "representation_blanked": 4,
+ "source_warnings": {
+  "formal_complaint_dated_after_decision": 8,
+  "decision_date_before_appeal_year": 2
+ },
+ "discrimination_found_no_relief": 14,
+ "totals": {
+  "discrimination_found": 187,
+  "complainant_got_relief": 517,
+  "commission_changed_result": 394
+ }
+}

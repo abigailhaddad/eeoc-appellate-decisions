@@ -26,8 +26,7 @@ A GitHub Actions job adds newly listed files daily
 
 `listing.parquet` (same rows as `listing.csv`; ID columns stored as text, so leading
 zeros survive) is the index: one row per listed link. It started as a full crawl on
-2026-11-01 (115,796 rows from 11,580 pages, matching the site's own total that day); the
-daily job appends rows for new URLs. `page` and `position` are where the link was when
+2026-11-01, which matched the site's own total that day; the daily job appends rows for new URLs. `page` and `position` are where the link was when
 first seen. EEOC's listing order shifts, so they aren't stable IDs; use `url`.
 
 | column | meaning |
@@ -50,7 +49,7 @@ a quick way to find a file without opening the shards. `state/runs.jsonl` has on
 per daily run: window, new rows, and whether the index matched the site's total.
 
 `extracted/decisions_2025_2026.parquet` has fields read from each file posted in 2025-26 by
-`claude-haiku-5-5`: one row per unique file (5,744 from a 2026-11-05 run, not updated daily), with `url`,
+`claude-haiku-5-5`: one row per unique file (a 2026-11-05 run, not updated daily), with `url`,
 `sha256`, `numbers`, `posted_month`, and these columns:
 
 - Case: `decision_date`, `agency`, `appealing_party`, `date_formal_complaint`
@@ -61,40 +60,38 @@ per daily run: window, new rows, and whether the index matched the site's total.
   `aj_found_discrimination`, `agency_action_on_aj`
 - Issues: `issue_performance_appraisal`, `issue_non_selection_or_promotion`, `theme_telework`
 
-Only columns that matched an answer key at least 97% of the time on 183 test decisions are included. These
-are model outputs, so check anything you rely on against the decision. The answer key was made by Claude
+Only columns that passed testing against an answer key are included. These are model outputs, so check anything you rely on against the decision. The answer key was made by Claude
 agents, not lawyers. `discrimination_found` means a finding exists in the case; it may predate this
-decision, and false includes "not reached". Accuracy by column, definitions and checks are in
-[extraction/README.md](https://github.com/abigailhaddad/eeoc-appellate-decisions/blob/main/extraction/README.md).
+decision, and false includes "not reached". Definitions and checks are in
+[extraction/README.md](https://github.com/abigailhaddad/eeoc-appellate-decisions/blob/main/extraction/README.md),
+and results by column in
+[accuracy.csv](https://github.com/abigailhaddad/eeoc-appellate-decisions/blob/main/extraction/accuracy.csv).
 
 ## Things to know before you use it
 
-The number in a file name doesn't reliably identify the decision. 6,175 numbers appear in
-more than one file. In a sample of 84 of those groups, 66 were the same decision posted
-more than once: byte-identical copies, txt and PDF versions, or renamed copies. Seven were
-a decision plus its posting order. Nine were different decisions in the same case, such
-as an original decision and its later reconsideration, often under the identical file
-name. Two had a file name pointing to the wrong case entirely (`05a40059.txt` is really
-Request No. 05A50059). Use the case number printed in the document, and `sha256` to find
+The number in a file name doesn't reliably identify the decision. Many numbers appear in more than one
+file. In a sample of those groups, most were the same decision posted more than once: byte-identical copies,
+txt and PDF versions, or renamed copies. Others were a decision plus its posting order, different decisions in
+the same case (such as an original decision and its later reconsideration, often under the identical file
+name), or a file name pointing to the wrong case entirely (`05a40059.txt` is really Request No. 05A50059). Use the case number printed in the document, and `sha256` to find
 exact copies.
 
 EEOC's posting dates aren't decision dates. It posted almost nothing between December 2024 and January 2026
-(7 files in folders dated 2025), then posted decisions issued during that gap.
+then posted decisions issued during that gap.
 
 Other quirks of the source, kept as-is:
 
-- 96 files have no usable number in the name. That includes truncated names like
+- Some files have no usable number in the name. That includes truncated names like
   `01983-2.txt` and weekly bundle PDFs that hold many decisions each.
-- 18 files are empty (0 bytes) on EEOC's site; rechecked 2026-11-05. For 5 of them a
-  `.txt` with the same name has the text (`05a60527`, `05a60499`, `05a60248`, `01a60482`,
-  `0120093445`). The other 13 have no copy under the same name: `0520110269.txt`,
-  `01972934_burns_-`, `0120093457.r`, `0120081469`, `0120080695`, `0120063635`,
-  `0420170003.txt`, `01976694.txt`, `0120161966.txt`, `0120160234.txt`, `01972830.txt`,
-  `0120083883.txt`, `0120083780.txt`.
-- Two listing rows link to the bare site root, `https://www.eeoc.gov`. They're in
+- Some files are empty on EEOC's site (rechecked 2026-11-05). For `05a60527`, `05a60499`, `05a60248`, `01a60482`
+  and `0120093445`, a `.txt` with the same name has the text. These have no copy under the same name:
+  `0520110269.txt`, `01972934_burns_-`, `0120093457.r`, `0120081469`, `0120080695`, `0120063635`,
+  `0420170003.txt`, `01976694.txt`, `0120161966.txt`, `0120160234.txt`, `01972830.txt`, `0120083883.txt`,
+  `0120083780.txt`.
+- A couple of listing rows link to the bare site root, `https://www.eeoc.gov`. They're in
   `listing.csv` but weren't downloaded.
 - Older decisions name complainants in full, as they do on EEOC's site.
-- About 10% of the 2025-26 PDFs have an image for page 1, apparently because the real name was redacted
+- Many 2025-26 PDFs have an image for page 1, apparently because the real name was redacted
   there, so plain text extraction misses the caption. `ocr_used` marks them in the extracted table.
 
 Code: https://github.com/abigailhaddad/eeoc-appellate-decisions
