@@ -1,0 +1,44 @@
+# Daily incremental update of the Hugging Face dataset (scripts/update.py).
+# Needs the repo secret HF_TOKEN (write access to the dataset).
+# Not active until this repo is pushed to GitHub and the secret is set.
+name: daily-update
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "17 11 * * *"   # 11:17 UTC daily
+permissions:
+  contents: read
+  issues: write
+concurrency:
+  group: daily-update
+  cancel-in-progress: false
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Tests
+        run: uv run --no-project --with pytest --with lxml --with pandas --with pyarrow --with huggingface_hub python -I -m pytest -q tests
+      - name: Update
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          uv run --no-project --with lxml --with pandas --with pyarrow --with huggingface_hub \
+            python -I scripts/update.py work abigailhaddad/eeoc-appellate-decisions 2>&1 | tee update.log
+          exit ${PIPESTATUS[0]}
+      - name: Open issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tail -40 update.log > tail.txt || echo "no log" > tail.txt
+          gh issue create --title "Daily EEOC update failed ($(date -u +%F))" \
+            --body "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          Exit codes: 2 stopped before finishing (fetch error, challenge page, too many new rows, window could not reach the frontier); 3 finished but the index and the site's total disagree (run a full recrawl); 1 reconcile failed.
+
+          \`\`\`
+          $(cat tail.txt)
+          \`\`\`"
