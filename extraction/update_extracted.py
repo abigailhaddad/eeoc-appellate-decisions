@@ -21,7 +21,7 @@ from huggingface_hub import CommitOperationAdd, HfApi
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from batch import params  # noqa: E402
-from build_table import POSTED_RE, build_row, schema_errors  # noqa: E402
+from build_table import POSTED_RE, build_row, fill_blank_numbers, number_map, schema_errors  # noqa: E402
 from text import download, to_text  # noqa: E402
 
 TABLE = "extracted/decisions.parquet"
@@ -99,8 +99,15 @@ def main():
     os.makedirs(a.work_dir, exist_ok=True)
     get = lambda p: download(a.repo_id, p, repo_type="dataset", local_dir=a.work_dir, force_download=True)
     records = [json.loads(l) for l in open(get("state/uploaded.jsonl"))]
-    nums = pd.read_parquet(get("listing.parquet")).drop_duplicates("url").set_index("url")["numbers"].to_dict()
+    nums = number_map(pd.read_parquet(get("listing.parquet")))
     table = pd.read_parquet(get(TABLE))
+    # Rows built from an older listing, or from a hyphenated file name, can have a blank number. Fill them
+    # from the current listing now. This costs nothing and calls no model.
+    table, filled = fill_blank_numbers(table, nums)
+    if filled:
+        print(f"filled {filled} blank appeal numbers from the listing", flush=True)
+        if not a.no_upload:
+            upload(HfApi(), a.repo_id, table, f"Fill {filled} blank appeal numbers from the listing")
     if a.drop_rows:
         table = table.sample(frac=1, random_state=1).iloc[a.drop_rows:].sort_index().reset_index(drop=True)
     by_sha = eligible(records)

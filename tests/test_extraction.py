@@ -108,3 +108,26 @@ def test_build_row_contradiction_and_warning():
     assert "decision_date_before_appeal_year" in r["source_warnings"]
     assert "formal_complaint_dated_after_decision" in r["source_warnings"]
     assert r["posted_month"] == "2026-01"
+
+
+def test_number_map_falls_back_to_loose_numbers():
+    import pandas as pd
+    listing = pd.DataFrame([
+        {"url": "u1", "numbers": "2025004177", "numbers_loose": ""},
+        {"url": "u2", "numbers": "", "numbers_loose": "2024005105"},
+        {"url": "u3", "numbers": "", "numbers_loose": ""},
+        {"url": "u1", "numbers": "dup", "numbers_loose": ""},
+    ])
+    assert build_table.number_map(listing) == {"u1": "2025004177", "u2": "2024005105", "u3": ""}
+    assert build_table.number_map(listing[["url", "numbers"]]) == {"u1": "2025004177", "u2": "", "u3": ""}
+
+
+def test_fill_blank_numbers_only_touches_blank_rows():
+    import pandas as pd
+    t = pd.DataFrame([{"url": "u1", "numbers": ""}, {"url": "u2", "numbers": "keep"},
+                      {"url": "u3", "numbers": None}, {"url": "u4", "numbers": ""}])
+    out, n = build_table.fill_blank_numbers(t, {"u1": "111", "u2": "222", "u3": "333", "u4": ""})
+    assert n == 2 and out.numbers.tolist() == ["111", "keep", "333", ""]
+    assert t.numbers.tolist()[:2] == ["", "keep"] and pd.isna(t.numbers[2])  # the input table is not changed
+    same, zero = build_table.fill_blank_numbers(out, {"u1": "999"})
+    assert zero == 0 and same.numbers.tolist() == out.numbers.tolist()

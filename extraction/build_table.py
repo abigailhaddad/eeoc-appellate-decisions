@@ -103,6 +103,27 @@ def build_row(sha, fs, f, t, nums, ocr_used):
             "model": MODEL, "prompt_version": PROMPT_VERSION}
 
 
+def number_map(listing):
+    """url -> appeal number(s) from the listing: the strict `numbers`, else the looser `numbers_loose`
+    (hyphenated or odd file names). A url with neither maps to ''."""
+    d = listing.drop_duplicates("url")
+    loose = d["numbers_loose"].fillna("") if "numbers_loose" in d else [""] * len(d)
+    return {u: (n or l) for u, n, l in zip(d["url"], d["numbers"].fillna(""), loose)}
+
+
+def fill_blank_numbers(table, nums):
+    """Fill blank `numbers` in an existing table from the url->numbers map. Rows that already have a number
+    are not touched. Returns (table, how many rows were filled)."""
+    new = table["url"].map(nums).fillna("")
+    blank = table["numbers"].fillna("") == ""
+    fill = blank & (new != "")
+    if not fill.any():
+        return table, 0
+    out = table.copy()
+    out.loc[fill, "numbers"] = new[fill]
+    return out, int(fill.sum())
+
+
 def main():
     work, listing, *paths = sys.argv[1:]
     res = {}
@@ -115,7 +136,7 @@ def main():
     by_sha = {}
     for f in files:
         by_sha.setdefault(f["sha256"], []).append(f)
-    nums = pd.read_parquet(listing).drop_duplicates("url").set_index("url")["numbers"].to_dict()
+    nums = number_map(pd.read_parquet(listing))
     ocr = {json.loads(l)["sha256"] for l in open(f"{work}/text_log.jsonl") if json.loads(l).get("ocr_pages")}
     rows, rep, bad_schema = [], Counter(), []
     for sha, fs in by_sha.items():
