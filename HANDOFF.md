@@ -1,93 +1,44 @@
-# EEOC appellate decisions: operator guide
+# EEOC appellate decisions: handoff
 
-For whoever runs this next. You don't need to be a developer for the routine parts.
+## What this is
 
-## What it does
+A copy of every file on EEOC's federal-sector appellate decisions page, kept in a Hugging Face dataset and checked every day for new ones. For decisions posted since 2025, Claude reads each decision and fills in case fields (agency, grounds claimed, outcome).
 
-EEOC posts its federal-sector appellate decisions as a long web listing of files (.txt, .pdf, .docx). This
-repo copies every listed file into a Hugging Face dataset, and each day it:
+- Code: https://github.com/abigailhaddad/eeoc-appellate-decisions
+- Data: https://huggingface.co/datasets/abigailhaddad/eeoc-appellate-decisions (the card is `hf/README.md`; columns and known limits are there)
+- Site: https://eeoc-decisions.abigailhaddad.com, built from https://github.com/abigailhaddad/dataset-explorer
 
-1. Looks at the end of the listing for newly posted files and uploads them.
-2. Asks Claude to read each new decision and fill in a handful of fields (agency, bases of discrimination,
-   whether discrimination was found, and so on).
+## What runs on its own
 
-Once a month it re-reads the whole listing to catch anything the daily job can't see, such as a file listed
-early in the list or a removal.
+- `.github/workflows/update.yml`: the daily job. Finds newly listed files and uploads them, then extracts fields from the new decisions.
+- `.github/workflows/recrawl.yml`: the monthly full re-read of the listing, which catches changes the daily job can't see. It runs in chunks and starts its own next chunk.
 
-You don't run anything by hand. When something breaks, the workflow opens a GitHub issue.
-
-## Where things live
-
-| What | Where |
-|---|---|
-| The data | https://huggingface.co/datasets/abigailhaddad/eeoc-appellate-decisions (card: `hf/README.md`) |
-| The code | This repo |
-| Daily job | `.github/workflows/update.yml`, 11:17 UTC every day |
-| Monthly recrawl | `.github/workflows/recrawl.yml`, starts on days 1 to 4 of the month at 03:17 UTC |
-| How updates work, and why | `PIPELINE.md` |
-| How the Claude-extracted fields were built and tested | `extraction/README.md` |
-| Run history | The Actions tab |
-| Failures | The Issues tab |
-
-The recrawl takes longer than one job may run, so each run does a chunk, saves its place on the Hugging Face
-dataset (`state/recrawl.json`), and starts the next one. The later dates in the schedule only pick up a crawl
-that stalled. If nothing is under way, they do nothing.
+The schedules are at the top of each file. Both can be started from the Actions tab. `PIPELINE.md` explains how the listing behaves and why the jobs are built this way.
 
 ## Secrets
 
-Set these under Settings > Secrets and variables > Actions.
+Settings > Secrets and variables > Actions.
 
-| Secret | What it's for | Used by |
-|---|---|---|
-| `HF_TOKEN` | A Hugging Face token with write access to the dataset | Daily update, field extraction, monthly recrawl |
-| `ANTHROPIC_API_KEY` | Pays for the Claude calls that extract fields from new decisions | Field extraction in the daily job |
-| `ANTHROPIC_WORKSPACE_ID` | Sent as the `anthropic-workspace-id` header. The code only sends it if it's set, so you can leave it out if your key doesn't need it | Field extraction in the daily job |
+- `HF_TOKEN`: write access to the dataset.
+- `ANTHROPIC_API_KEY`: pays for the field extraction in the daily job.
+- `ANTHROPIC_WORKSPACE_ID` (optional): sent as a header only when set.
 
-The recrawl only needs `HF_TOKEN`. The daily job also uses GitHub's built-in token to open issues, so you
-set nothing for that.
+## If you take it over
 
-## Moving it to a new owner
+- Find every place that names the current owner: `grep -rn abigailhaddad . --exclude-dir=.git`
+- The dataset id is `HF_DATASET` at the top of `update.yml` and `recrawl.yml`. The scripts take it as an argument. The rest are links in `README.md`, `hf/README.md` (the dataset card, which you copy up to the dataset on Hugging Face) and `extraction/README.md`.
+- Copy the existing dataset to your account instead of starting empty. `scripts/update.py` downloads `listing.parquet` and `state/uploaded.jsonl` from it first and doesn't create the dataset. I haven't tried an empty start.
 
-Everything that names the current owner:
+## When it breaks
 
-1. **`.github/workflows/update.yml` and `.github/workflows/recrawl.yml`**: change `HF_DATASET` at the top of
-   each file. This is the only place the scripts get the dataset id from.
-2. **The dataset itself**: it has to exist on the new account (or be transferred) before the first run. The
-   daily job downloads `listing.parquet` and `state/uploaded.jsonl` from it at the start of every run. I haven't
-   tried starting from an empty dataset, so this guide doesn't cover that.
-3. **Text that mentions the old name** (links and examples, not behavior):
-   - `README.md`: the dataset link and the `--dry-run` example
-   - `hf/README.md`: three GitHub links and the "Code:" line. This is the dataset card, so it needs to be
-     copied up to the dataset's own README on Hugging Face for the change to show.
-   - `extraction/README.md`: the example command
-4. **The three secrets above**, with the new owner's values.
+- A failed run opens a GitHub issue ("Daily EEOC update failed" or "Monthly recrawl needs a look") with the end of the log. Run history is in the Actions tab.
+- Exit codes are in the docstrings of `scripts/update.py`, `scripts/recrawl.py` and `extraction/update_extracted.py`. Nothing here deletes files from the dataset.
+- If eeoc.gov returns a challenge page instead of the listing, the daily job stops (exit code 2).
 
-## When something breaks
+## Costs
 
-The daily job opens an issue titled "Daily EEOC update failed (date)" with the last 40 lines of the log. The
-recrawl opens "Monthly recrawl needs a look (date)". The exit code tells you what happened:
+The Claude calls cover new decisions only. A daily run refuses to start if more than 1,500 new decisions are waiting, and stops at $10 of spend (`--max-new` and `--max-usd` in `extraction/update_extracted.py`). How the fields were built and tested: `extraction/README.md`.
 
-| Exit code | Daily job | Recrawl |
-|---|---|---|
-| 1 | The check of the Hub against its state file failed. From the extraction step: some files got no result and will be retried tomorrow. | |
-| 2 | Stopped before finishing: a fetch error, a challenge page from eeoc.gov, more than 3,000 new rows, or a window that couldn't reach the frontier. From the extraction step: stopped by a limit. | Stopped on an error. Progress is kept; run it again to continue. |
-| 3 | Finished, but the index and the site's total disagree. Start the monthly recrawl by hand with the `force` input. | Finished, with URLs in the index that aren't in the listing. See `state/recrawl_report.json` on the Hub. |
+## Run it yourself
 
-`PIPELINE.md` has the detail on each stop. Nothing is deleted from the dataset by any of these jobs. Missing
-URLs are reported, not removed.
-
-## Running it yourself
-
-Tests:
-
-```sh
-uv run --no-project --with pytest --with lxml --with pandas --with pyarrow --with huggingface_hub --with anthropic \
-  python -I -m pytest -q tests
-```
-
-A dry run reads the Hub and the live site and uploads nothing:
-
-```sh
-uv run --no-project --with lxml --with pandas --with pyarrow --with huggingface_hub \
-  python -I scripts/update.py work YOUR_ACCOUNT/YOUR_DATASET --dry-run
-```
+Commands for the tests and a dry run are in `README.md`.
