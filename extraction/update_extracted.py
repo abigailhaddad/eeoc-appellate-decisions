@@ -130,8 +130,14 @@ def main():
             part = [s for s in shas[i:i + CHUNK] if s in got]
             failed += [s for s in shas[i:i + CHUNK] if s not in got]
             texts = {}
-            for s in part:
-                t, _, ocr = to_text(got[s]["content"], got[s]["url"].lower().endswith(".pdf"))
+            for s in list(part):
+                try:
+                    t, _, ocr = to_text(got[s]["content"], got[s]["url"].lower().endswith(".pdf"))
+                except Exception as e:  # a corrupt or truncated PDF must not stop every other file
+                    print(f"cannot read {s[:10]} ({got[s]['url']}): {e!r}", flush=True)
+                    part.remove(s)
+                    failed.append(s)
+                    continue
                 texts[s] = (t, ocr > 0)
             with ThreadPoolExecutor(WORKERS) as ex:
                 results = list(ex.map(lambda s: extract_one(texts[s][0], call), part))
