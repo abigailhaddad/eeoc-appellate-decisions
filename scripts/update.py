@@ -70,6 +70,25 @@ def plan(index, window_rows, total):
     return new, report
 
 
+def listing_blob(api, repo_id, revision):
+    """Git blob id of listing.parquet at this revision."""
+    info = api.get_paths_info(repo_id, ["listing.parquet"], repo_type="dataset", revision=revision)
+    return info[0].blob_id if info else None
+
+
+def guard_head(api, repo_id, start_blob):
+    """Return the Hub head to pass as parent_commit for the final commit, or raise if listing.parquet
+    is not the version this run started from. The fetch commits made during the run touch only data/
+    and state/, so listing.parquet must be unchanged; any other change (e.g. a recrawl) means the
+    final commit would overwrite it with a stale index."""
+    head = api.repo_info(repo_id, repo_type="dataset").sha
+    now = listing_blob(api, repo_id, head)
+    if now != start_blob:
+        raise RuntimeError("listing.parquet changed on the Hub during this run (another job wrote it); "
+                           "not overwriting it. Re-run update.py.")
+    return head
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("work_dir")
@@ -86,8 +105,11 @@ def main():
     os.makedirs(state_dir, exist_ok=True)
     today = datetime.date.today().isoformat()
 
+    api = HfApi()
+    start_head = api.repo_info(a.repo_id, repo_type="dataset").sha
+    start_blob = listing_blob(api, a.repo_id, start_head)
     lp = hf_hub_download(a.repo_id, "listing.parquet", repo_type="dataset", local_dir=a.work_dir,
-                         force_download=True)
+                         force_download=True, revision=start_head)
     if a.state_from:
         shutil.copyfile(a.state_from, os.path.join(state_dir, "uploaded.jsonl"))
     else:
@@ -144,16 +166,21 @@ def main():
 
     run = {"date": today, **report, "fetch_stopped": fetch_stopped,
            "finished_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")}
-    api = HfApi()
+    try:
+        head = guard_head(api, a.repo_id, start_blob)
+    except RuntimeError as e:
+        print(f"STOPPING: {e}", flush=True)
+        return 2
     runs = b""
     if api.file_exists(a.repo_id, "state/runs.jsonl", repo_type="dataset"):
         runs = open(hf_hub_download(a.repo_id, "state/runs.jsonl", repo_type="dataset",
-                                    local_dir=a.work_dir, force_download=True), "rb").read()
+                                    local_dir=a.work_dir, force_download=True, revision=head), "rb").read()
     pbuf = io.BytesIO()
     out.to_parquet(pbuf, index=False)
     api.create_commit(
         repo_id=a.repo_id, repo_type="dataset",
         commit_message=f"Update listing {today}: {report['new_rows']} new rows",
+        parent_commit=head,
         operations=[
             CommitOperationAdd(path_in_repo="listing.parquet", path_or_fileobj=pbuf.getvalue()),
             CommitOperationAdd(path_in_repo="listing.csv", path_or_fileobj=csv_path),

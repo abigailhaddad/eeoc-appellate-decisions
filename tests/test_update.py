@@ -116,3 +116,26 @@ def test_fetch_404_not_retried(tmp_path):
     get = fake_site(45, {4: (404, b"", "404")})
     with pytest.raises(fetch_pages.FetchError, match="HTTP 404"):
         fetch_pages.fetch(str(tmp_path), last_n=1, delay=0, get=get, sleep=lambda s: None)
+
+
+class FakeApi:
+    def __init__(self, head, blob):
+        self.head, self.blob = head, blob
+
+    def repo_info(self, repo_id, repo_type=None):
+        return type("I", (), {"sha": self.head})()
+
+    def get_paths_info(self, repo_id, paths, repo_type=None, revision=None):
+        assert revision == self.head
+        return [type("P", (), {"blob_id": self.blob})()]
+
+
+def test_guard_head_returns_head_when_listing_unchanged():
+    api = FakeApi("h2", "blobA")  # head moved (fetch commits) but listing.parquet did not
+    assert update.guard_head(api, "r", "blobA") == "h2"
+
+
+def test_guard_head_refuses_when_listing_changed():
+    api = FakeApi("h2", "blobB")  # a recrawl rewrote listing.parquet
+    with pytest.raises(RuntimeError, match="listing.parquet changed"):
+        update.guard_head(api, "r", "blobA")
